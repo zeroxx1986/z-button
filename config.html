@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zbutton configuration</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171c24; --panel2: #1f2630; --fg: #d7dee8;
+    --muted: #8b97a8; --accent: #4ea1ff; --ok: #4ec97a; --err: #ff6b6b;
+    --border: #2a323d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  header .meta { color: var(--muted); font-size: 13px; }
+  main { padding: 20px 24px 48px; max-width: 900px; }
+  section {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 18px;
+  }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px;
+       color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 10px 18px; }
+  .field { display: flex; align-items: center; gap: 8px; }
+  .field label { width: 132px; color: var(--muted); font-size: 12.5px; flex: none; }
+  .field input[type=text], .field input[type=password], .field input[type=number] {
+    flex: 1; min-width: 0; background: var(--panel2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+    font: inherit;
+  }
+  .field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  button {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 11px; font: inherit; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #06121f;
+                   font-weight: 600; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .status { font-size: 13px; color: var(--muted); }
+  .status.on { color: var(--ok); }
+  #log {
+    background: #0a0d12; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; height: 220px; overflow: auto; white-space: pre-wrap;
+    font: 12.5px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
+    color: #b9c4d2;
+  }
+  #log .err { color: var(--err); }
+  #log .ok { color: var(--ok); }
+  #log .dev { color: var(--muted); }
+  .notice {
+    background: #2a1b1b; border: 1px solid #6b3030; color: #ffc9c9;
+    padding: 14px 16px; border-radius: 10px; margin-bottom: 18px;
+  }
+  .notice code { color: #fff; }
+  .hint { color: var(--muted); font-size: 12px; }
+  progress { width: 100%; height: 10px; }
+  .firmware-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>zbutton configuration</h1>
+  <span class="meta" id="verline">not connected</span>
+</header>
+
+<main>
+  <div id="unsupported" class="notice" style="display:none"></div>
+
+  <section>
+    <h2>Connection</h2>
+    <div class="row">
+      <button id="connect" class="primary">Connect</button>
+      <button id="disconnect" disabled>Disconnect</button>
+      <span class="status" id="portstatus">no device selected</span>
+    </div>
+    <p class="hint">Talks to the device over USB (Web Serial). Needs a secure
+    context: a <code>https://</code> page or <code>localhost</code>. A page opened
+    straight off disk will not work.</p>
+  </section>
+
+  <section id="cfgsec">
+    <h2>Settings</h2>
+    <div class="grid" id="settings"></div>
+    <p class="hint">Enter or <b>Save</b> stores one setting on the device.
+    <b>Clear</b> restores its default.</p>
+  </section>
+
+  <section>
+    <h2>Actions</h2>
+    <div class="row">
+      <button data-cmd="b()">Read battery</button>
+      <button data-cmd="h()">Test heartbeat</button>
+      <button data-cmd="g()">Test button</button>
+      <button data-cmd="r()">Read last error</button>
+      <button data-cmd="e()">Clear last error</button>
+      <button data-cmd="c()">Clear configuration</button>
+      <button data-cmd="x()">Clear everything &amp; restart</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Firmware update</h2>
+    <div class="firmware-row">
+      <input type="file" id="fwfile" accept=".bin">
+      <span class="hint" id="fwmax"></span>
+    </div>
+    <div class="firmware-row" style="margin-top:10px">
+      <button id="fwgo" disabled>Upload firmware</button>
+      <span class="hint" id="fwstatus"></span>
+    </div>
+    <progress id="fwprog" value="0" max="100" style="margin-top:10px; display:none"></progress>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+/* ---------- settings table: id -> {label, type} ---------- */
+const SETTINGS = [
+  ["dn",  "Device name",            "text"],
+  ["ss",  "WiFi SSID",              "text"],
+  ["ps",  "WiFi password",          "password"],
+  ["bu",  "Button endpoint",        "text"],
+  ["hu",  "Heartbeat endpoint",     "text"],
+  ["bf",  "Button carries full info", "bool"],
+  ["ip",  "Fixed IP",               "text"],
+  ["gw",  "Gateway",                "text"],
+  ["nm",  "Netmask",                "text"],
+  ["dns", "DNS server",             "text"],
+  ["sl",  "Sleep interval (s)",     "number"],
+  ["lb",  "Low battery (%)",        "number"],
+  ["wt",  "WiFi timeout (ms)",      "number"],
+  ["rt",  "Request timeout (ms)",   "number"],
+];
+
+const logEl = document.getElementById("log");
+function log(text, cls) {
+  const span = document.createElement("span");
+  if (cls) span.className = cls;
+  span.textContent = text + "\n";
+  logEl.appendChild(span);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function logDev(text) { log(text, "dev"); }
+
+/* ---------- runtime support check ---------- */
+if (!("serial" in navigator)) {
+  const n = document.getElementById("unsupported");
+  n.style.display = "block";
+  n.innerHTML = "This browser cannot talk to the device: the Web Serial API is " +
+    "not available here. Use a desktop Chromium browser (Chrome, Edge, Opera), or " +
+    "a plain serial terminal at 115200 8N1 as a fallback. The page must be served " +
+    "over <code>https://</code> or <code>localhost</code>.";
+  document.getElementById("connect").disabled = true;
+}
+
+/* ---------- line reader over the serial stream ---------- */
+const rx = { buf: "", lines: [], waiters: [] };
+function rxFeed(text) {
+  rx.buf += text;
+  let i;
+  while ((i = rx.buf.indexOf("\n")) >= 0) {
+    let line = rx.buf.slice(0, i);
+    rx.buf = rx.buf.slice(i + 1);
+    if (line.endsWith("\r")) line = line.slice(0, -1);
+    if (rx.waiters.length) rx.waiters.shift()(line);
+    else rx.lines.push(line);
+  }
+}
+function rxLine() {
+  if (rx.lines.length) return Promise.resolve(rx.lines.shift());
+  return new Promise(res => rx.waiters.push(res));
+}
+async function rxUntil(pred) {
+  for (;;) {
+    const line = await rxLine();
+    logDev(line);
+    if (pred(line)) return line;
+  }
+}
+
+/* ---------- serial port plumbing ---------- */
+let port = null, writer = null, reader = null, connected = false;
+
+async function connect() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+  } catch (e) {
+    log("connect failed: " + e.message, "err");
+    return;
+  }
+  connected = true;
+  document.getElementById("connect").disabled = true;
+  document.getElementById("disconnect").disabled = false;
+  document.getElementById("portstatus").textContent = "connected";
+  document.getElementById("portstatus").className = "status on";
+
+  writer = port.writable.getWriter();
+  readLoop();
+  await loadAll();
+  try { await readVersion(); } catch (e) {}
+}
+
+async function readLoop() {
+  const decoder = new TextDecoder();
+  try {
+    while (port && port.readable) {
+      reader = port.readable.getReader();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            const text = decoder.decode(value, { stream: true });
+            rxFeed(text);
+            for (const ln of text.split("\n")) {
+              if (ln.trim()) logDev(ln.replace(/\r$/, ""));
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    }
+  } catch (e) {
+    /* falls through to the dropped-port handling below */
+  }
+  if (connected) {
+    log("device rebooting or port dropped", "err");
+    teardown();
+  }
+}
+
+async function disconnect() {
+  teardown();
+}
+function teardown() {
+  connected = false;
+  try { if (reader) reader.cancel(); } catch (e) {}
+  try { if (writer) writer.releaseLock(); } catch (e) {}
+  try { if (port) port.close(); } catch (e) {}
+  port = null; writer = null; reader = null;
+  document.getElementById("connect").disabled = false;
+  document.getElementById("disconnect").disabled = true;
+  document.getElementById("portstatus").textContent = "no device selected";
+  document.getElementById("portstatus").className = "status";
+}
+
+async function sendLine(s) {
+  if (!writer) return;
+  const data = new TextEncoder().encode(s + "\n");
+  await writer.write(data);
+}
+
+/* ---------- build the form ---------- */
+const fields = {};
+function buildForm() {
+  const host = document.getElementById("settings");
+  for (const [id, label, type] of SETTINGS) {
+    const row = document.createElement("div");
+    row.className = "field";
+    const lab = document.createElement("label");
+    lab.textContent = label;
+    lab.title = id;
+    row.appendChild(lab);
+
+    let input;
+    if (type === "bool") {
+      input = document.createElement("input");
+      input.type = "checkbox";
+    } else {
+      input = document.createElement("input");
+      input.type = type === "number" ? "number" : (type === "password" ? "password" : "text");
+    }
+    input.id = "f_" + id;
+    row.appendChild(input);
+
+    const save = document.createElement("button");
+    save.textContent = "Save";
+    save.onclick = () => saveField(id);
+    row.appendChild(save);
+
+    const clr = document.createElement("button");
+    clr.textContent = "Clear";
+    clr.onclick = () => clearField(id);
+    row.appendChild(clr);
+
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); saveField(id); }
+    });
+
+    host.appendChild(row);
+    fields[id] = input;
+  }
+}
+buildForm();
+
+async function saveField(id) {
+  const f = fields[id];
+  let val;
+  if (f.type === "checkbox") val = f.checked ? "1" : "0";
+  else val = f.value;
+  await sendLine(val === "" ? id : id + " " + val);
+  const reply = await rxUntil(l => /^OK/.test(l) || /^ERR/.test(l));
+  if (reply.startsWith("ERR")) log(reply, "err"); else log(reply, "ok");
+  await loadAll();
+}
+
+async function clearField(id) {
+  await sendLine(id);
+  const reply = await rxUntil(l => /^OK/.test(l) || /^ERR/.test(l));
+  if (reply.startsWith("ERR")) log(reply, "err"); else log(reply, "ok");
+  await loadAll();
+}
+
+/* ---------- read configuration back ---------- */
+async function loadAll() {
+  await sendLine("ls");
+  const vals = {};
+  const seen = new Set();
+  for (let i = 0; i < SETTINGS.length; i++) {
+    const line = await rxLine();
+    if (line === undefined) break;
+    const sp = line.indexOf(" ");
+    const id = sp < 0 ? line : line.slice(0, sp);
+    const val = sp < 0 ? "" : line.slice(sp + 1);
+    seen.add(id);
+    vals[id] = val;
+  }
+  for (const [id] of SETTINGS) {
+    const f = fields[id];
+    const v = (id in vals) ? vals[id] : "";
+    if (f.type === "checkbox") f.checked = (v === "1");
+    else f.value = v;
+    if (!seen.has(id)) logDev("(setting " + id + " not reported)");
+  }
+}
+
+async function readVersion() {
+  await sendLine("?");
+  const line = await rxUntil(l => l.startsWith("app version"));
+  document.getElementById("verline").textContent = line;
+}
+
+/* ---------- actions ---------- */
+for (const b of document.querySelectorAll("[data-cmd]")) {
+  b.onclick = async () => {
+    if (!connected) return;
+    const cmd = b.dataset.cmd;
+    await sendLine(cmd);
+    const reply = await rxUntil(l =>
+      /^(OK|ERR|not set|no error|unknown|gauge unavailable)/.test(l) ||
+      /^[0-9]+%$/.test(l) || /^[a-z]+ \(/.test(l));
+    if (reply.startsWith("ERR")) log(reply, "err");
+    else log(reply, "ok");
+    if (cmd === "c()") await loadAll();
+  };
+}
+
+/* ---------- firmware update ---------- */
+const fwFile = document.getElementById("fwfile");
+const fwGo = document.getElementById("fwgo");
+const fwProg = document.getElementById("fwprog");
+const fwStatus = document.getElementById("fwstatus");
+let fwMax = 0;
+
+fwFile.addEventListener("change", () => {
+  fwGo.disabled = !fwFile.files.length || !connected;
+  fwStatus.textContent = fwFile.files.length ? fwFile.files[0].name : "";
+});
+
+/* standard CRC-32 (zlib), matching the device's crc32_le() */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+fwGo.onclick = async () => {
+  if (!connected || !fwFile.files.length) return;
+  const file = fwFile.files[0];
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const crc = crc32(bytes);
+
+  fwStatus.textContent = "starting update mode...";
+  await sendLine("u()");
+  const ready = await rxUntil(l => l.startsWith("READY") || l.startsWith("ERR"));
+  if (!ready.startsWith("READY")) {
+    log("update refused: " + ready, "err");
+    fwStatus.textContent = "refused";
+    return;
+  }
+  fwMax = parseInt(ready.split(" ")[1], 10);
+  document.getElementById("fwmax").textContent =
+    "device accepts up to " + fwMax + " bytes";
+
+  if (bytes.length > fwMax) {
+    log("image is " + bytes.length + " bytes, larger than the " + fwMax + " byte slot",
+        "err");
+    fwStatus.textContent = "file too large - update abandoned";
+    return;
+  }
+
+  await sendLine(bytes.length + " " + crc);
+  const send = await rxUntil(l => l === "SEND" || l.startsWith("ERR"));
+  if (send !== "SEND") {
+    log("update rejected: " + send, "err");
+    fwStatus.textContent = "refused";
+    return;
+  }
+
+  fwProg.style.display = "block";
+  fwProg.value = 0;
+  const CHUNK = 4096;
+  for (let off = 0; off < bytes.length; off += CHUNK) {
+    await writer.write(bytes.subarray(off, Math.min(off + CHUNK, bytes.length)));
+    fwProg.value = Math.round(((off + CHUNK) / bytes.length) * 100);
+    if ((off / CHUNK) % 8 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  fwStatus.textContent = "image sent, waiting for the device...";
+
+  const verdict = await rxUntil(l => l.startsWith("OK rebooting") || l.startsWith("ERR"));
+  if (verdict.startsWith("OK")) {
+    log("firmware accepted, device rebooting", "ok");
+    fwStatus.textContent = "OK - device rebooting";
+    teardown();
+  } else {
+    log("update failed: " + verdict, "err");
+    fwStatus.textContent = verdict;
+  }
+};
+
+/* ---------- wire up ---------- */
+document.getElementById("connect").onclick = connect;
+document.getElementById("disconnect").onclick = disconnect;
+navigator.serial && navigator.serial.addEventListener("disconnect", () => {
+  if (connected) { log("port physically disconnected", "err"); teardown(); }
+});
+
+</script>
+</body>
+</html>
