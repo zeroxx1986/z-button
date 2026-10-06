@@ -183,7 +183,9 @@ function rxFeed(text) {
     let line = rx.buf.slice(0, i);
     rx.buf = rx.buf.slice(i + 1);
     if (line.endsWith("\r")) line = line.slice(0, -1);
-    if (line.trim()) logDev(line);
+    /* "# <n>" is the per-chunk upload ack: hundreds of them, so they drive the
+       progress bar instead of the log pane. */
+    if (line.trim() && !line.startsWith("# ")) logDev(line);
     if (rx.waiters.length) rx.waiters.shift()(line);
     else rx.lines.push(line);
   }
@@ -443,8 +445,11 @@ fwGo.onclick = async () => {
   const CHUNK = 4096;
   for (let off = 0; off < bytes.length; off += CHUNK) {
     await writer.write(bytes.subarray(off, Math.min(off + CHUNK, bytes.length)));
+    /* Wait for the device to acknowledge this chunk before sending the next.
+       The link has no back-pressure, so a host that streams the whole image
+       outruns the device and the image is dropped. */
+    await rxUntil(l => l.startsWith("# "));
     fwProg.value = Math.round(((off + CHUNK) / bytes.length) * 100);
-    if ((off / CHUNK) % 8 === 0) await new Promise(r => setTimeout(r, 0));
   }
   fwStatus.textContent = "image sent, waiting for the device...";
 
