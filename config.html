@@ -47,12 +47,18 @@
   .fields { display: grid; grid-template-columns: 1fr; gap: 9px; }
   .field { display: flex; align-items: center; gap: 8px; }
   .field label { width: 152px; color: var(--muted); font-size: 12.5px; flex: none; }
-  .field input[type=text], .field input[type=password], .field input[type=number] {
-    flex: 1; min-width: 0; background: var(--panel2); color: var(--fg);
+  input[type=text], input[type=password], input[type=number] {
+    background: var(--panel2); color: var(--fg);
     border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
     font: inherit;
+    /* the save confirmation fades back to the normal border by itself */
+    transition: border-color .7s ease, box-shadow .7s ease;
   }
-  .field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  input:disabled { opacity: .45; cursor: not-allowed; }
+  input.saved { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+  .field input[type=text], .field input[type=password], .field input[type=number],
+  #raw { flex: 1; min-width: 0; }
   .field button { padding: 5px 9px; font-size: 12.5px; }
   button {
     background: var(--panel2); color: var(--fg); border: 1px solid var(--border);
@@ -114,10 +120,15 @@
             <button id="connect" class="primary">Connect</button>
             <button id="disconnect" disabled>Disconnect</button>
             <span class="status" id="portstatus">no device selected</span>
+            <button id="reload" style="margin-left:auto" disabled>Reload config</button>
           </div>
           <p class="hint">Talks to the device over USB (Web Serial). Needs a secure
           context: an <code>https://</code> page or <code>localhost</code>. A page
           opened straight off disk will not work.</p>
+          <p class="hint">Nothing is stored until you save it. Enter or <b>Save</b>
+          stores one setting on the device, <b>Clear</b> restores its default, and
+          a checkbox saves as soon as you toggle it. <b>Reload config</b> reads the
+          settings back from the device.</p>
         </section>
 
         <div id="settings"></div>
@@ -157,6 +168,13 @@
             <span class="hint" id="logstatus" style="margin:0"></span>
           </div>
           <div id="log"></div>
+          <div class="row" style="margin-top:10px">
+            <input type="text" id="raw" autocomplete="off" disabled
+                   placeholder="raw command, e.g. ls   (Enter sends it)">
+            <button id="rawsend" disabled>Send</button>
+          </div>
+          <p class="hint">Goes to the device as one line, exactly as the console
+          would receive it. The device echoes it back into the log.</p>
         </section>
       </div>
     </div>
@@ -169,8 +187,8 @@
 /* Bump the page version whenever this file changes: a cached copy and a fresh
    one are otherwise indistinguishable, which is how a stale page silently
    disagrees with the firmware. */
-const PAGE_VERSION = "0.5";
-const PAGE_BUILT   = "2026-10-06 11:35";
+const PAGE_VERSION = "0.6";
+const PAGE_BUILT   = "2026-10-06 13:32";
 
 
 /* ---------- log pane ---------- */
@@ -333,11 +351,9 @@ async function connect() {
      last one ended is otherwise prefixed to the first line of this one. */
   rxReset();
   connected = true;
-  document.getElementById("connect").disabled = true;
-  document.getElementById("disconnect").disabled = false;
   document.getElementById("portstatus").textContent = "connected";
   document.getElementById("portstatus").className = "status on";
-  updateFwButton();
+  setConnectedUi(true);
 
   writer = port.writable.getWriter();
   log("web ui v" + PAGE_VERSION + " (" + PAGE_BUILT + ")", "dev");
@@ -382,12 +398,10 @@ function teardown() {
   try { if (writer) writer.releaseLock(); } catch (e) {}
   try { if (port) port.close(); } catch (e) {}
   port = null; writer = null; reader = null;
-  document.getElementById("connect").disabled = false;
-  document.getElementById("disconnect").disabled = true;
   document.getElementById("portstatus").textContent = "no device selected";
   document.getElementById("portstatus").className = "status";
   verLine.textContent = "app version - not connected";
-  updateFwButton();
+  setConnectedUi(false);
 }
 
 async function sendLine(s) {
@@ -443,19 +457,28 @@ function buildField(id, label, type) {
   input.id = "f_" + id;
   row.appendChild(input);
 
-  const save = document.createElement("button");
-  save.textContent = "Save";
-  save.onclick = () => saveField(id);
-  row.appendChild(save);
+  if (type === "bool") {
+    /* A checkbox has no meaningful unsaved state to hold: the moment it is
+       toggled, storing it is the only sensible thing to do, and a Save button
+       would just be a second step to forget. */
+    input.addEventListener("change", () => saveField(id));
+  } else {
+    const save = document.createElement("button");
+    save.textContent = "Save";
+    save.className = "fieldbtn";
+    save.onclick = () => saveField(id);
+    row.appendChild(save);
 
-  const clr = document.createElement("button");
-  clr.textContent = "Clear";
-  clr.onclick = () => clearField(id);
-  row.appendChild(clr);
+    const clr = document.createElement("button");
+    clr.textContent = "Clear";
+    clr.className = "fieldbtn";
+    clr.onclick = () => clearField(id);
+    row.appendChild(clr);
 
-  input.addEventListener("keydown", e => {
-    if (e.key === "Enter") { e.preventDefault(); saveField(id); }
-  });
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); saveField(id); }
+    });
+  }
 
   fields[id] = input;
   return row;
@@ -475,18 +498,44 @@ function buildForm() {
       grid.appendChild(buildField(id, label, type));
     }
     sec.appendChild(grid);
-    if (title === "WiFi") {
-      const p = document.createElement("p");
-      p.className = "hint";
-      p.innerHTML = "Enter or <b>Save</b> stores one setting on the device; " +
-                    "<b>Clear</b> restores its default. Nothing is stored until " +
-                    "you save it.";
-      sec.appendChild(p);
-    }
     host.appendChild(sec);
   }
 }
 buildForm();
+
+/* Brief confirmation on the field itself, so a save is visible without reading
+   the log.  The class comes off a moment later and the border fades back on its
+   own, which keeps the whole cue under a second. */
+function flashSaved(el) {
+  el.classList.remove("saved");
+  void el.offsetWidth;                        /* restart the transition */
+  el.classList.add("saved");
+  clearTimeout(el._saved);
+  el._saved = setTimeout(() => el.classList.remove("saved"), 130);
+}
+
+/* Connected: the fields hold the device's configuration.  Disconnected: they hold
+   nothing and accept nothing, so a stale value cannot be mistaken for the
+   device's state, or written to a port that is gone.  The log is deliberately
+   left alone - it is the record of what happened, and clears on demand. */
+function setConnectedUi(on) {
+  for (const id in fields) {
+    const f = fields[id];
+    f.disabled = !on;
+    if (!on) {
+      if (f.type === "checkbox") f.checked = false;
+      else f.value = "";
+    }
+  }
+  for (const b of document.querySelectorAll(".fieldbtn, [data-cmd], #rawsend")) {
+    b.disabled = !on;
+  }
+  document.getElementById("reload").disabled = !on;
+  document.getElementById("raw").disabled = !on;
+  document.getElementById("connect").disabled = on;
+  document.getElementById("disconnect").disabled = !on;
+  updateFwButton();
+}
 
 async function saveField(id) {
   const f = fields[id];
@@ -495,7 +544,12 @@ async function saveField(id) {
   else val = f.value;
   await sendLine(val === "" ? id : id + " " + val);
   const reply = await rxUntil(l => /^OK/.test(l) || /^ERR/.test(l));
-  if (reply.startsWith("ERR")) log(reply, "err"); else log(reply, "ok");
+  if (reply.startsWith("ERR")) {
+    log(reply, "err");
+  } else {
+    log(reply, "ok");
+    flashSaved(f);
+  }
   await loadAll();
 }
 
@@ -719,6 +773,29 @@ fwGo.onclick = async () => {
 /* ---------- wire up ---------- */
 document.getElementById("connect").onclick = connect;
 document.getElementById("disconnect").onclick = disconnect;
+
+document.getElementById("reload").onclick = async () => {
+  if (!connected) return;
+  log("reloading configuration from the device", "dev");
+  await loadAll();
+};
+
+/* Raw input: the escape hatch for anything the page has no control for, which is
+   most useful exactly while a new command is being added to the firmware. */
+async function sendRaw() {
+  const el = document.getElementById("raw");
+  const text = el.value.trim();
+  if (!connected || !text) return;
+  el.value = "";
+  await sendLine(text);   /* the device echoes it, so it appears in the log */
+}
+document.getElementById("rawsend").onclick = sendRaw;
+document.getElementById("raw").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); sendRaw(); }
+});
+
+/* Nothing is usable before the first connect. */
+setConnectedUi(false);
 navigator.serial && navigator.serial.addEventListener("disconnect", () => {
   if (connected) { log("port physically disconnected", "err"); teardown(); }
 });
