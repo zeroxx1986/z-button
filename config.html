@@ -171,6 +171,10 @@ if (!("serial" in navigator)) {
 }
 
 /* ---------- line reader over the serial stream ---------- */
+/* Exactly one place decides what a line is.  The device writes the console a few
+   bytes at a time, so a USB chunk routinely ends mid-line: drawing each chunk
+   splits one line into as many pieces as it took to arrive, and drawing from
+   both here and rxUntil() prints every line twice. */
 const rx = { buf: "", lines: [], waiters: [] };
 function rxFeed(text) {
   rx.buf += text;
@@ -179,6 +183,7 @@ function rxFeed(text) {
     let line = rx.buf.slice(0, i);
     rx.buf = rx.buf.slice(i + 1);
     if (line.endsWith("\r")) line = line.slice(0, -1);
+    if (line.trim()) logDev(line);
     if (rx.waiters.length) rx.waiters.shift()(line);
     else rx.lines.push(line);
   }
@@ -190,7 +195,6 @@ function rxLine() {
 async function rxUntil(pred) {
   for (;;) {
     const line = await rxLine();
-    logDev(line);
     if (pred(line)) return line;
   }
 }
@@ -228,11 +232,7 @@ async function readLoop() {
           const { value, done } = await reader.read();
           if (done) break;
           if (value) {
-            const text = decoder.decode(value, { stream: true });
-            rxFeed(text);
-            for (const ln of text.split("\n")) {
-              if (ln.trim()) logDev(ln.replace(/\r$/, ""));
-            }
+            rxFeed(decoder.decode(value, { stream: true }));
           }
         }
       } finally {
@@ -335,14 +335,17 @@ async function loadAll() {
   await sendLine("ls");
   const vals = {};
   const seen = new Set();
-  for (let i = 0; i < SETTINGS.length; i++) {
+  const want = new Set(SETTINGS.map(s => s[0]));
+  /* Stop when every setting has arrived, not after a fixed line count: one
+     stray line shifts a counted window and silently hides the last setting. */
+  for (let i = 0; i < SETTINGS.length + 8 && seen.size < want.size; i++) {
     const line = await rxLine();
     if (line === undefined) break;
     const sp = line.indexOf(" ");
     const id = sp < 0 ? line : line.slice(0, sp);
-    const val = sp < 0 ? "" : line.slice(sp + 1);
+    if (!want.has(id)) continue;
     seen.add(id);
-    vals[id] = val;
+    vals[id] = sp < 0 ? "" : line.slice(sp + 1);
   }
   for (const [id] of SETTINGS) {
     const f = fields[id];
