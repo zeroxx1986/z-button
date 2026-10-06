@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>zbutton configuration</title>
+<title>Z Button WebUI</title>
 <style>
   :root {
     --bg: #0e1116; --panel: #171c24; --panel2: #1f2630; --fg: #d7dee8;
@@ -15,43 +15,68 @@
     margin: 0; background: var(--bg); color: var(--fg);
     font: 14px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
   }
-  header {
-    padding: 18px 24px; border-bottom: 1px solid var(--border);
-    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 0 24px; }
+  header { border-bottom: 1px solid var(--border); }
+  header .wrap {
+    display: flex; align-items: flex-start; gap: 16px; padding-top: 16px;
+    padding-bottom: 16px;
   }
-  h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: .3px; }
-  header .meta { color: var(--muted); font-size: 13px; }
-  main { padding: 20px 24px 48px; max-width: 900px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  .versions {
+    margin-left: auto; text-align: right; color: var(--muted);
+    font-size: 12.5px; line-height: 1.5;
+    display: flex; flex-direction: column; align-items: flex-end;
+  }
+  main { padding: 20px 0 48px; }
+  .layout {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 1fr);
+    gap: 18px; align-items: start;
+  }
+  .col-right { position: sticky; top: 16px; }
+  @media (max-width: 1000px) {
+    .layout { grid-template-columns: 1fr; }
+    .col-right { position: static; }
+  }
   section {
     background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; padding: 16px 18px; margin-bottom: 18px;
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
   }
+  section:last-child { margin-bottom: 0; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px;
        color: var(--muted); margin: 0 0 12px; font-weight: 600; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 10px 18px; }
+  .fields { display: grid; grid-template-columns: 1fr; gap: 9px; }
   .field { display: flex; align-items: center; gap: 8px; }
-  .field label { width: 132px; color: var(--muted); font-size: 12.5px; flex: none; }
+  .field label { width: 152px; color: var(--muted); font-size: 12.5px; flex: none; }
   .field input[type=text], .field input[type=password], .field input[type=number] {
     flex: 1; min-width: 0; background: var(--panel2); color: var(--fg);
     border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
     font: inherit;
   }
   .field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .field button { padding: 5px 9px; font-size: 12.5px; }
   button {
     background: var(--panel2); color: var(--fg); border: 1px solid var(--border);
     border-radius: 6px; padding: 6px 11px; font: inherit; cursor: pointer;
   }
   button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #06121f;
-                   font-weight: 600; }
+  button.primary { background: var(--accent); border-color: var(--accent);
+                   color: #06121f; font-weight: 600; }
   button:disabled { opacity: .45; cursor: not-allowed; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .status { font-size: 13px; color: var(--muted); }
   .status.on { color: var(--ok); }
+  .hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+  .actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .action { display: grid; grid-template-columns: 168px 1fr; gap: 12px;
+            align-items: center; }
+  .action button { width: 100%; }
+  .action .desc { color: var(--muted); font-size: 12.5px; }
+  .firmware-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  progress { width: 100%; height: 10px; }
   #log {
     background: #0a0d12; border: 1px solid var(--border); border-radius: 8px;
-    padding: 10px 12px; height: 220px; overflow: auto; white-space: pre-wrap;
+    padding: 10px 12px; height: min(70vh, 860px); overflow: auto;
+    white-space: pre-wrap; word-break: break-word;
     font: 12.5px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
     color: #b9c4d2;
   }
@@ -60,103 +85,98 @@
   #log .dev { color: var(--muted); }
   .notice {
     background: #2a1b1b; border: 1px solid #6b3030; color: #ffc9c9;
-    padding: 14px 16px; border-radius: 10px; margin-bottom: 18px;
+    padding: 14px 16px; border-radius: 10px; margin-bottom: 16px;
   }
   .notice code { color: #fff; }
-  .hint { color: var(--muted); font-size: 12px; }
-  progress { width: 100%; height: 10px; }
-  .firmware-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 </style>
 </head>
 <body>
 <header>
-  <h1>zbutton configuration</h1>
-  <span class="meta" id="pagever"></span>
-  <span class="meta" id="verline">not connected</span>
+  <div class="wrap">
+    <h1>Z Button WebUI</h1>
+    <div class="versions">
+      <span id="pagever"></span>
+      <span id="verline">app version - not connected</span>
+    </div>
+  </div>
 </header>
 
 <main>
-  <div id="unsupported" class="notice" style="display:none"></div>
+  <div class="wrap">
+    <div id="unsupported" class="notice" style="display:none"></div>
 
-  <section>
-    <h2>Connection</h2>
-    <div class="row">
-      <button id="connect" class="primary">Connect</button>
-      <button id="disconnect" disabled>Disconnect</button>
-      <span class="status" id="portstatus">no device selected</span>
+    <div class="layout">
+      <div class="col-left">
+
+        <section>
+          <h2>Connection</h2>
+          <div class="row">
+            <button id="connect" class="primary">Connect</button>
+            <button id="disconnect" disabled>Disconnect</button>
+            <span class="status" id="portstatus">no device selected</span>
+          </div>
+          <p class="hint">Talks to the device over USB (Web Serial). Needs a secure
+          context: an <code>https://</code> page or <code>localhost</code>. A page
+          opened straight off disk will not work.</p>
+        </section>
+
+        <div id="settings"></div>
+
+        <section>
+          <h2>Actions</h2>
+          <div class="actions" id="actions"></div>
+          <p class="hint">The two test sends connect to WiFi exactly as a real wake
+          does, so they take a few seconds and report what really happened.</p>
+        </section>
+
+        <section>
+          <h2>Firmware update</h2>
+          <div class="firmware-row">
+            <input type="file" id="fwfile" accept=".bin">
+            <span class="hint" id="fwmax" style="margin:0"></span>
+          </div>
+          <div class="firmware-row" style="margin-top:10px">
+            <button id="fwgo" disabled>Upload firmware</button>
+            <span class="hint" id="fwstatus" style="margin:0"></span>
+          </div>
+          <progress id="fwprog" value="0" max="100"
+                    style="margin-top:10px; display:none"></progress>
+          <p class="hint">Sends the image to the other slot, one chunk at a time,
+          waiting for the device to acknowledge each chunk. Keep this page open
+          until the device reboots.</p>
+        </section>
+
+      </div>
+
+      <div class="col-right">
+        <section>
+          <h2>Log</h2>
+          <div class="row" style="margin-bottom:10px">
+            <button id="logclear">Clear log</button>
+            <button id="logcopy">Select all &amp; copy</button>
+            <span class="hint" id="logstatus" style="margin:0"></span>
+          </div>
+          <div id="log"></div>
+        </section>
+      </div>
     </div>
-    <p class="hint">Talks to the device over USB (Web Serial). Needs a secure
-    context: a <code>https://</code> page or <code>localhost</code>. A page opened
-    straight off disk will not work.</p>
-  </section>
-
-  <section id="cfgsec">
-    <h2>Settings</h2>
-    <div class="grid" id="settings"></div>
-    <p class="hint">Enter or <b>Save</b> stores one setting on the device.
-    <b>Clear</b> restores its default.</p>
-  </section>
-
-  <section>
-    <h2>Actions</h2>
-    <div class="row">
-      <button data-cmd="b()">Read battery</button>
-      <button data-cmd="h()">Test heartbeat</button>
-      <button data-cmd="g()">Test button</button>
-      <button data-cmd="r()">Read last error</button>
-      <button data-cmd="e()">Clear last error</button>
-      <button data-cmd="c()">Clear configuration</button>
-      <button data-cmd="x()">Clear everything &amp; restart</button>
-    </div>
-  </section>
-
-  <section>
-    <h2>Firmware update</h2>
-    <div class="firmware-row">
-      <input type="file" id="fwfile" accept=".bin">
-      <span class="hint" id="fwmax"></span>
-    </div>
-    <div class="firmware-row" style="margin-top:10px">
-      <button id="fwgo" disabled>Upload firmware</button>
-      <span class="hint" id="fwstatus"></span>
-    </div>
-    <progress id="fwprog" value="0" max="100" style="margin-top:10px; display:none"></progress>
-  </section>
-
-  <section>
-    <h2>Log</h2>
-    <div id="log"></div>
-  </section>
+  </div>
 </main>
 
 <script>
 "use strict";
 
-/* Bump both when the page changes: a cached copy and a fresh one are
-   otherwise indistinguishable, which is how a stale page silently disagrees
-   with the firmware. */
-const PAGE_VERSION = "0.4";
-const PAGE_BUILT   = "2026-10-06 10:20";
+/* Bump the page version whenever this file changes: a cached copy and a fresh
+   one are otherwise indistinguishable, which is how a stale page silently
+   disagrees with the firmware. */
+const PAGE_VERSION = "0.5";
+const PAGE_BUILT   = "2026-10-06 11:35";
 
-/* ---------- settings table: id -> {label, type} ---------- */
-const SETTINGS = [
-  ["dn",  "Device name",            "text"],
-  ["ss",  "WiFi SSID",              "text"],
-  ["ps",  "WiFi password",          "password"],
-  ["bu",  "Button endpoint",        "text"],
-  ["hu",  "Heartbeat endpoint",     "text"],
-  ["bf",  "Button carries full info", "bool"],
-  ["ip",  "Fixed IP",               "text"],
-  ["gw",  "Gateway",                "text"],
-  ["nm",  "Netmask",                "text"],
-  ["dns", "DNS server",             "text"],
-  ["sl",  "Sleep interval (s)",     "number"],
-  ["lb",  "Low battery (%)",        "number"],
-  ["wt",  "WiFi timeout (ms)",      "number"],
-  ["rt",  "Request timeout (ms)",   "number"],
-];
 
+/* ---------- log pane ---------- */
 const logEl = document.getElementById("log");
+const logStatus = document.getElementById("logstatus");
+
 function log(text, cls) {
   const span = document.createElement("span");
   if (cls) span.className = cls;
@@ -168,6 +188,28 @@ function logDev(text) { log(text, "dev"); }
 
 document.getElementById("pagever").textContent =
   "web ui v" + PAGE_VERSION + " (" + PAGE_BUILT + ")";
+
+document.getElementById("logclear").onclick = () => {
+  logEl.textContent = "";
+  logStatus.textContent = "cleared";
+};
+document.getElementById("logcopy").onclick = async () => {
+  const text = logEl.innerText;
+  if (!text.trim()) { logStatus.textContent = "log is empty"; return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    logStatus.textContent = "copied " + text.length + " characters";
+  } catch (e) {
+    /* The clipboard API needs a secure context and permission. Falling back to
+       selecting the text at least leaves the user one Ctrl+C away. */
+    const range = document.createRange();
+    range.selectNodeContents(logEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    logStatus.textContent = "clipboard blocked - log selected, press Ctrl+C";
+  }
+};
 
 /* ---------- runtime support check ---------- */
 if (!("serial" in navigator)) {
@@ -186,6 +228,18 @@ if (!("serial" in navigator)) {
    splits one line into as many pieces as it took to arrive, and drawing from
    both here and rxUntil() prints every line twice. */
 const rx = { buf: "", lines: [], waiters: [] };
+
+/* Throw away everything half-received.  A partial line left in buf is prefixed to
+   the first line of the next session, so "SEND" arrives as "<leftover>SEND" and
+   fails an exact match; queued lines and waiters from an abandoned step do the
+   same damage one step later.  Called when a session starts and when an update
+   starts, because both follow output that can end mid-line. */
+function rxReset() {
+  rx.buf = "";
+  rx.lines.length = 0;
+  rx.waiters.length = 0;
+}
+
 function rxFeed(text) {
   rx.buf += text;
   let i;
@@ -200,28 +254,72 @@ function rxFeed(text) {
     else rx.lines.push(line);
   }
 }
+
 function rxLine() {
   if (rx.lines.length) return Promise.resolve(rx.lines.shift());
-  return new Promise(res => rx.waiters.push(res));
+  return new Promise(res => { rx.waiters.push(res); });
 }
+
 async function rxUntil(pred) {
   for (;;) {
     const line = await rxLine();
     if (pred(line)) return line;
   }
 }
-/* rxUntil that gives up, so a page/firmware disagreement reports itself instead
-   of hanging the update with no explanation. */
+
+/* One "give me the next line" request whose waiter can be withdrawn again. */
+function rxRequest() {
+  if (rx.lines.length) {
+    return { promise: Promise.resolve(rx.lines.shift()), withdraw: null };
+  }
+  let res;
+  const promise = new Promise(r => { res = r; });
+  const w = line => res(line);
+  rx.waiters.push(w);
+  return {
+    promise,
+    withdraw: () => {
+      const i = rx.waiters.indexOf(w);
+      if (i >= 0) rx.waiters.splice(i, 1);
+    },
+  };
+}
+
+/* Bounded rxUntil, for steps where hanging is worse than failing.  On giving up
+   the waiter is WITHDRAWN: leaving it queued means the next line the device sends
+   is handed to a request nobody is waiting on any more, so it is swallowed
+   silently and the following step fails with a timeout of its own, far from the
+   real cause. */
 async function rxUntilOrTimeout(pred, ms) {
-  const hit = await Promise.race([
-    rxUntil(pred),
-    new Promise(res => setTimeout(() => res(null), ms)),
-  ]);
-  return hit;
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const left = deadline - Date.now();
+    if (left <= 0) return null;
+    const req = rxRequest();
+    const line = await Promise.race([
+      req.promise,
+      new Promise(res => setTimeout(() => res(undefined), left)),
+    ]);
+    if (line === undefined) {
+      if (req.withdraw) req.withdraw();
+      return null;
+    }
+    if (pred(line)) return line;
+  }
 }
 
 /* ---------- serial port plumbing ---------- */
 let port = null, writer = null, reader = null, connected = false;
+const fwFile = document.getElementById("fwfile");
+const fwGo = document.getElementById("fwgo");
+const fwProg = document.getElementById("fwprog");
+const fwStatus = document.getElementById("fwstatus");
+const verLine = document.getElementById("verline");
+let fwMax = 0;
+
+function updateFwButton() {
+  fwGo.disabled = !connected || !fwFile.files.length;
+}
 
 async function connect() {
   try {
@@ -231,11 +329,15 @@ async function connect() {
     log("connect failed: " + e.message, "err");
     return;
   }
+  /* A new session starts from a clean reader: what was half-received when the
+     last one ended is otherwise prefixed to the first line of this one. */
+  rxReset();
   connected = true;
   document.getElementById("connect").disabled = true;
   document.getElementById("disconnect").disabled = false;
   document.getElementById("portstatus").textContent = "connected";
   document.getElementById("portstatus").className = "status on";
+  updateFwButton();
 
   writer = port.writable.getWriter();
   log("web ui v" + PAGE_VERSION + " (" + PAGE_BUILT + ")", "dev");
@@ -273,6 +375,7 @@ async function readLoop() {
 async function disconnect() {
   teardown();
 }
+
 function teardown() {
   connected = false;
   try { if (reader) reader.cancel(); } catch (e) {}
@@ -283,6 +386,8 @@ function teardown() {
   document.getElementById("disconnect").disabled = true;
   document.getElementById("portstatus").textContent = "no device selected";
   document.getElementById("portstatus").className = "status";
+  verLine.textContent = "app version - not connected";
+  updateFwButton();
 }
 
 async function sendLine(s) {
@@ -291,45 +396,94 @@ async function sendLine(s) {
   await writer.write(data);
 }
 
-/* ---------- build the form ---------- */
+/* ---------- settings, in the groups they belong to ---------- */
+const SETTINGS = [
+  ["dn",  "Device name",              "text"],
+  ["ss",  "WiFi SSID",                "text"],
+  ["ps",  "WiFi password",            "password"],
+  ["bu",  "Button endpoint",          "text"],
+  ["hu",  "Heartbeat endpoint",       "text"],
+  ["bf",  "Button carries full info", "bool"],
+  ["ip",  "Fixed IP",                 "text"],
+  ["gw",  "Gateway",                  "text"],
+  ["nm",  "Netmask",                  "text"],
+  ["dns", "DNS server",               "text"],
+  ["sl",  "Sleep interval (s)",       "number"],
+  ["rt",  "Request timeout (ms)",     "number"],
+  ["wt",  "WiFi timeout (ms)",        "number"],
+  ["lb",  "Low battery (%)",          "number"],
+];
+
+const GROUPS = [
+  ["Device",    ["dn"]],
+  ["WiFi",      ["ss", "ps"]],
+  ["Endpoints", ["bu", "hu", "bf"]],
+  ["Static IP", ["ip", "gw", "nm", "dns"]],
+  ["Timing",    ["sl", "rt", "wt"]],
+  ["Battery",   ["lb"]],
+];
+
+const DEF = {};
+for (const [id, label, type] of SETTINGS) DEF[id] = [label, type];
+
 const fields = {};
+
+function buildField(id, label, type) {
+  const row = document.createElement("div");
+  row.className = "field";
+  const lab = document.createElement("label");
+  lab.textContent = label;
+  lab.title = id;
+  row.appendChild(lab);
+
+  const input = document.createElement("input");
+  input.type = type === "number" ? "number"
+             : type === "password" ? "password"
+             : type === "bool" ? "checkbox" : "text";
+  input.id = "f_" + id;
+  row.appendChild(input);
+
+  const save = document.createElement("button");
+  save.textContent = "Save";
+  save.onclick = () => saveField(id);
+  row.appendChild(save);
+
+  const clr = document.createElement("button");
+  clr.textContent = "Clear";
+  clr.onclick = () => clearField(id);
+  row.appendChild(clr);
+
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); saveField(id); }
+  });
+
+  fields[id] = input;
+  return row;
+}
+
 function buildForm() {
   const host = document.getElementById("settings");
-  for (const [id, label, type] of SETTINGS) {
-    const row = document.createElement("div");
-    row.className = "field";
-    const lab = document.createElement("label");
-    lab.textContent = label;
-    lab.title = id;
-    row.appendChild(lab);
-
-    let input;
-    if (type === "bool") {
-      input = document.createElement("input");
-      input.type = "checkbox";
-    } else {
-      input = document.createElement("input");
-      input.type = type === "number" ? "number" : (type === "password" ? "password" : "text");
+  for (const [title, ids] of GROUPS) {
+    const sec = document.createElement("section");
+    const h = document.createElement("h2");
+    h.textContent = title;
+    sec.appendChild(h);
+    const grid = document.createElement("div");
+    grid.className = "fields";
+    for (const id of ids) {
+      const [label, type] = DEF[id];
+      grid.appendChild(buildField(id, label, type));
     }
-    input.id = "f_" + id;
-    row.appendChild(input);
-
-    const save = document.createElement("button");
-    save.textContent = "Save";
-    save.onclick = () => saveField(id);
-    row.appendChild(save);
-
-    const clr = document.createElement("button");
-    clr.textContent = "Clear";
-    clr.onclick = () => clearField(id);
-    row.appendChild(clr);
-
-    input.addEventListener("keydown", e => {
-      if (e.key === "Enter") { e.preventDefault(); saveField(id); }
-    });
-
-    host.appendChild(row);
-    fields[id] = input;
+    sec.appendChild(grid);
+    if (title === "WiFi") {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.innerHTML = "Enter or <b>Save</b> stores one setting on the device; " +
+                    "<b>Clear</b> restores its default. Nothing is stored until " +
+                    "you save it.";
+      sec.appendChild(p);
+    }
+    host.appendChild(sec);
   }
 }
 buildForm();
@@ -380,11 +534,48 @@ async function loadAll() {
 
 async function readVersion() {
   await sendLine("?");
-  const line = await rxUntil(l => l.startsWith("app version"));
-  document.getElementById("verline").textContent = line;
+  /* Bounded: an unbounded wait here would leave a waiter queued for the rest of
+     the session, silently eating whatever line arrived next. */
+  const line = await rxUntilOrTimeout(l => l.startsWith("app version"), 4000);
+  verLine.textContent = line || "app version unknown - no answer from the device";
 }
 
 /* ---------- actions ---------- */
+const ACTIONS = [
+  ["b()", "Read battery",
+   "Ask the fuel gauge for the battery percentage."],
+  ["h()", "Test heartbeat",
+   "Connect to WiFi and send the heartbeat request now."],
+  ["g()", "Test button",
+   "Connect to WiFi and send the button request now."],
+  ["r()", "Read last error",
+   "Show the error recorded by the last failed send, with the wake cause."],
+  ["e()", "Clear last error",
+   "Forget the recorded error. Does not touch the settings."],
+  ["c()", "Clear configuration",
+   "Erase every stored setting and fall back to the defaults."],
+  ["x()", "Clear everything & restart",
+   "Erase the settings and the recorded error, then restart the device."],
+];
+
+function buildActions() {
+  const host = document.getElementById("actions");
+  for (const [cmd, label, desc] of ACTIONS) {
+    const row = document.createElement("div");
+    row.className = "action";
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.dataset.cmd = cmd;
+    const d = document.createElement("span");
+    d.className = "desc";
+    d.textContent = desc;
+    row.appendChild(b);
+    row.appendChild(d);
+    host.appendChild(row);
+  }
+}
+buildActions();
+
 for (const b of document.querySelectorAll("[data-cmd]")) {
   b.onclick = async () => {
     if (!connected) return;
@@ -400,17 +591,6 @@ for (const b of document.querySelectorAll("[data-cmd]")) {
 }
 
 /* ---------- firmware update ---------- */
-const fwFile = document.getElementById("fwfile");
-const fwGo = document.getElementById("fwgo");
-const fwProg = document.getElementById("fwprog");
-const fwStatus = document.getElementById("fwstatus");
-let fwMax = 0;
-
-fwFile.addEventListener("change", () => {
-  fwGo.disabled = !fwFile.files.length || !connected;
-  fwStatus.textContent = fwFile.files.length ? fwFile.files[0].name : "";
-});
-
 /* standard CRC-32 (zlib), matching the device's crc32_le() */
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -427,79 +607,109 @@ function crc32(bytes) {
   return (c ^ 0xFFFFFFFF) >>> 0;
 }
 
+fwFile.addEventListener("change", () => {
+  fwStatus.textContent = fwFile.files.length ? fwFile.files[0].name : "";
+  updateFwButton();
+});
+updateFwButton();
+
 fwGo.onclick = async () => {
   if (!connected || !fwFile.files.length) return;
   try {
-  const file = fwFile.files[0];
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const crc = crc32(bytes);
+    /* Start from a clean reader and clean state.  Anything half-received before
+       this point would be prefixed to the next line the device sends, and the
+       handshake below is matched exactly - a "SEND" that arrives as
+       "<leftover>SEND" fails the match and the update times out.  This is what
+       made a second update in the same session fail while a page refresh,
+       which clears exactly this state, made it work. */
+    rxReset();
+    fwMax = 0;
+    fwProg.style.display = "none";
+    fwProg.value = 0;
+    fwStatus.textContent = "starting update mode...";
+    document.getElementById("fwmax").textContent = "";
 
-  fwStatus.textContent = "starting update mode...";
-  await sendLine("u()");
-  const ready = await rxUntil(l => l.startsWith("READY") || l.startsWith("ERR"));
-  if (!ready.startsWith("READY")) {
-    log("update refused: " + ready, "err");
-    fwStatus.textContent = "refused";
-    return;
-  }
-  fwMax = parseInt(ready.split(" ")[1], 10);
-  document.getElementById("fwmax").textContent =
-    "device accepts up to " + fwMax + " bytes";
+    const file = fwFile.files[0];
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const crc = crc32(bytes);
 
-  if (bytes.length > fwMax) {
-    log("image is " + bytes.length + " bytes, larger than the " + fwMax + " byte slot",
-        "err");
-    fwStatus.textContent = "file too large - update abandoned";
-    return;
-  }
-
-  await sendLine(bytes.length + " " + crc);
-  /* The device erases the target slot before it answers SEND, which takes
-     seconds, so this wait is generous - but not unbounded. */
-  const send = await rxUntilOrTimeout(l => l === "SEND" || l.startsWith("ERR"), 30000);
-  if (send === null) {
-    log("no answer to the header line after 30 s - the device is no longer in update mode",
-        "err");
-    fwStatus.textContent = "no answer";
-    return;
-  }
-  if (send !== "SEND") {
-    log("update rejected: " + send, "err");
-    fwStatus.textContent = "refused";
-    return;
-  }
-
-  fwProg.style.display = "block";
-  fwProg.value = 0;
-  const CHUNK = 4096;
-  const chunks = Math.ceil(bytes.length / CHUNK);
-  log("sending " + bytes.length + " bytes in " + chunks + " chunks", "dev");
-  for (let off = 0; off < bytes.length; off += CHUNK) {
-    await writer.write(bytes.subarray(off, Math.min(off + CHUNK, bytes.length)));
-    /* Wait for the device to acknowledge this chunk before sending the next.
-       The link has no back-pressure, so a host that streams the whole image
-       outruns the device and the image is dropped. */
-    const ack = await rxUntilOrTimeout(l => l.startsWith("# "), 4000);
-    if (ack === null) {
-      log("no ack for chunk " + (off / CHUNK + 1) + " of " + chunks +
-          " - the device is not answering chunk acks. Is the firmware the " +
-          "matching build? Check the version line above.", "err");
-      fwStatus.textContent = "no ack - abandoned";
+    await sendLine("u()");
+    const ready = await rxUntilOrTimeout(
+      l => l.startsWith("READY") || l.startsWith("ERR"), 5000);
+    if (ready === null) {
+      log("no answer to u() after 5 s - is the device awake and in config mode?", "err");
+      fwStatus.textContent = "no answer";
       return;
     }
-    fwProg.value = Math.round(((off + CHUNK) / bytes.length) * 100);
-  }
-  fwStatus.textContent = "image sent, waiting for the device...";
+    if (!ready.startsWith("READY")) {
+      log("update refused: " + ready, "err");
+      fwStatus.textContent = "refused";
+      return;
+    }
+    fwMax = parseInt(ready.split(" ")[1], 10);
+    document.getElementById("fwmax").textContent =
+      "device accepts up to " + fwMax + " bytes";
 
-  const verdict = await rxUntil(l => l.startsWith("OK rebooting") || l.startsWith("ERR"));
-  if (verdict.startsWith("OK")) {
-    log("firmware accepted, device rebooting", "ok");
-    fwStatus.textContent = "OK - device rebooting";
-    teardown();
-  } else {
-    log("update failed: " + verdict, "err");
-    fwStatus.textContent = verdict;
-  }
+    if (bytes.length > fwMax) {
+      log("image is " + bytes.length + " bytes, larger than the " +
+          fwMax + " byte slot", "err");
+      fwStatus.textContent = "file too large - update abandoned";
+      return;
+    }
+
+    await sendLine(bytes.length + " " + crc);
+    /* The device erases the target slot before it answers SEND, which takes
+       seconds, so this wait is generous - but not unbounded. */
+    const send = await rxUntilOrTimeout(
+      l => l === "SEND" || l.startsWith("ERR"), 30000);
+    if (send === null) {
+      log("no answer to the header line after 30 s - the device is no longer " +
+          "in update mode", "err");
+      fwStatus.textContent = "no answer";
+      return;
+    }
+    if (send !== "SEND") {
+      log("update rejected: " + send, "err");
+      fwStatus.textContent = "refused";
+      return;
+    }
+
+    fwProg.style.display = "block";
+    const CHUNK = 4096;
+    const chunks = Math.ceil(bytes.length / CHUNK);
+    log("sending " + bytes.length + " bytes in " + chunks + " chunks", "dev");
+    for (let off = 0; off < bytes.length; off += CHUNK) {
+      await writer.write(bytes.subarray(off, Math.min(off + CHUNK, bytes.length)));
+      /* Wait for the device to acknowledge this chunk before sending the next.
+         The link has no back-pressure, so a host that streams the whole image
+         outruns the device and the image is dropped. */
+      const ack = await rxUntilOrTimeout(l => l.startsWith("# "), 4000);
+      if (ack === null) {
+        log("no ack for chunk " + (off / CHUNK + 1) + " of " + chunks +
+            " - the device is not answering chunk acks. Is the firmware the " +
+            "matching build? Check the version line above.", "err");
+        fwStatus.textContent = "no ack - abandoned";
+        return;
+      }
+      fwProg.value = Math.round(((off + CHUNK) / bytes.length) * 100);
+    }
+    fwStatus.textContent = "image sent, waiting for the device...";
+
+    const verdict = await rxUntilOrTimeout(
+      l => l.startsWith("OK rebooting") || l.startsWith("ERR"), 20000);
+    if (verdict === null) {
+      log("no verdict from the device after the image was sent", "err");
+      fwStatus.textContent = "no verdict";
+      return;
+    }
+    if (verdict.startsWith("OK")) {
+      log("firmware accepted, device rebooting", "ok");
+      fwStatus.textContent = "OK - device rebooting";
+      teardown();
+    } else {
+      log("update failed: " + verdict, "err");
+      fwStatus.textContent = verdict;
+    }
   } catch (e) {
     log("update error: " + (e && e.message ? e.message : e), "err");
     fwStatus.textContent = "error - see log";
