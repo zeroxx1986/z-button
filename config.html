@@ -454,7 +454,15 @@ fwGo.onclick = async () => {
   }
 
   await sendLine(bytes.length + " " + crc);
-  const send = await rxUntil(l => l === "SEND" || l.startsWith("ERR"));
+  /* The device erases the target slot before it answers SEND, which takes
+     seconds, so this wait is generous - but not unbounded. */
+  const send = await rxUntilOrTimeout(l => l === "SEND" || l.startsWith("ERR"), 30000);
+  if (send === null) {
+    log("no answer to the header line after 30 s - the device is no longer in update mode",
+        "err");
+    fwStatus.textContent = "no answer";
+    return;
+  }
   if (send !== "SEND") {
     log("update rejected: " + send, "err");
     fwStatus.textContent = "refused";
