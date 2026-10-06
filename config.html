@@ -135,8 +135,8 @@
 /* Bump both when the page changes: a cached copy and a fresh one are
    otherwise indistinguishable, which is how a stale page silently disagrees
    with the firmware. */
-const PAGE_VERSION = "0.3";
-const PAGE_BUILT   = "2026-10-06 08:45";
+const PAGE_VERSION = "0.4";
+const PAGE_BUILT   = "2026-10-06 10:20";
 
 /* ---------- settings table: id -> {label, type} ---------- */
 const SETTINGS = [
@@ -192,7 +192,7 @@ function rxFeed(text) {
   while ((i = rx.buf.indexOf("\n")) >= 0) {
     let line = rx.buf.slice(0, i);
     rx.buf = rx.buf.slice(i + 1);
-    if (line.endsWith("\r")) line = line.slice(0, -1);
+    line = line.replace(/\r+$/, "");   /* any producer may double the CR */
     /* "# <n>" is the per-chunk upload ack: hundreds of them, so they drive the
        progress bar instead of the log pane. */
     if (line.trim() && !line.startsWith("# ")) logDev(line);
