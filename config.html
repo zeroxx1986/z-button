@@ -71,6 +71,7 @@
 <body>
 <header>
   <h1>zbutton configuration</h1>
+  <span class="meta" id="pagever"></span>
   <span class="meta" id="verline">not connected</span>
 </header>
 
@@ -131,6 +132,12 @@
 <script>
 "use strict";
 
+/* Bump both when the page changes: a cached copy and a fresh one are
+   otherwise indistinguishable, which is how a stale page silently disagrees
+   with the firmware. */
+const PAGE_VERSION = "0.3";
+const PAGE_BUILT   = "2026-10-06 08:45";
+
 /* ---------- settings table: id -> {label, type} ---------- */
 const SETTINGS = [
   ["dn",  "Device name",            "text"],
@@ -158,6 +165,9 @@ function log(text, cls) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 function logDev(text) { log(text, "dev"); }
+
+document.getElementById("pagever").textContent =
+  "web ui v" + PAGE_VERSION + " (" + PAGE_BUILT + ")";
 
 /* ---------- runtime support check ---------- */
 if (!("serial" in navigator)) {
@@ -200,6 +210,15 @@ async function rxUntil(pred) {
     if (pred(line)) return line;
   }
 }
+/* rxUntil that gives up, so a page/firmware disagreement reports itself instead
+   of hanging the update with no explanation. */
+async function rxUntilOrTimeout(pred, ms) {
+  const hit = await Promise.race([
+    rxUntil(pred),
+    new Promise(res => setTimeout(() => res(null), ms)),
+  ]);
+  return hit;
+}
 
 /* ---------- serial port plumbing ---------- */
 let port = null, writer = null, reader = null, connected = false;
@@ -219,6 +238,7 @@ async function connect() {
   document.getElementById("portstatus").className = "status on";
 
   writer = port.writable.getWriter();
+  log("web ui v" + PAGE_VERSION + " (" + PAGE_BUILT + ")", "dev");
   readLoop();
   await loadAll();
   try { await readVersion(); } catch (e) {}
@@ -409,6 +429,7 @@ function crc32(bytes) {
 
 fwGo.onclick = async () => {
   if (!connected || !fwFile.files.length) return;
+  try {
   const file = fwFile.files[0];
   const bytes = new Uint8Array(await file.arrayBuffer());
   const crc = crc32(bytes);
@@ -443,12 +464,21 @@ fwGo.onclick = async () => {
   fwProg.style.display = "block";
   fwProg.value = 0;
   const CHUNK = 4096;
+  const chunks = Math.ceil(bytes.length / CHUNK);
+  log("sending " + bytes.length + " bytes in " + chunks + " chunks", "dev");
   for (let off = 0; off < bytes.length; off += CHUNK) {
     await writer.write(bytes.subarray(off, Math.min(off + CHUNK, bytes.length)));
     /* Wait for the device to acknowledge this chunk before sending the next.
        The link has no back-pressure, so a host that streams the whole image
        outruns the device and the image is dropped. */
-    await rxUntil(l => l.startsWith("# "));
+    const ack = await rxUntilOrTimeout(l => l.startsWith("# "), 4000);
+    if (ack === null) {
+      log("no ack for chunk " + (off / CHUNK + 1) + " of " + chunks +
+          " - the device is not answering chunk acks. Is the firmware the " +
+          "matching build? Check the version line above.", "err");
+      fwStatus.textContent = "no ack - abandoned";
+      return;
+    }
     fwProg.value = Math.round(((off + CHUNK) / bytes.length) * 100);
   }
   fwStatus.textContent = "image sent, waiting for the device...";
@@ -461,6 +491,10 @@ fwGo.onclick = async () => {
   } else {
     log("update failed: " + verdict, "err");
     fwStatus.textContent = verdict;
+  }
+  } catch (e) {
+    log("update error: " + (e && e.message ? e.message : e), "err");
+    fwStatus.textContent = "error - see log";
   }
 };
 
